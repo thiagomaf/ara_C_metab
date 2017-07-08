@@ -1,4 +1,4 @@
-*Mathematical Modeling of the Central Carbohydrate Metabolism in Arabidopsis Reveals a Substantial Regulatory Influence of Vacuolar Invertase on Whole Plant Carbon Metabolism*
+**Mathematical Modeling of the Central Carbohydrate Metabolism in Arabidopsis Reveals a Substantial Regulatory Influence of Vacuolar Invertase on Whole Plant Carbon Metabolism**
 
 Source: http://www.plantphysiol.org/content/153/1/260
 
