@@ -1,0 +1,96 @@
+% Information:
+  % ============
+  % SBPD Package - Systems Biology Parameter Determination Package
+% Copyright 2008 by Henning Schmidt, henning@sbtoolbox2.org
+
+
+
+%% Load the project and set the model
+Arabidopsis = SBPDproject('');
+sbpopt = Arabidopsis;
+
+% Show model information
+SBPDinfo(Arabidopsis)
+
+% Estimate parameters for model in the project
+modelindex = 1
+
+%% Define GLOBAL parameters to estimate and lower and upper bound 
+% (commented parameters are not optimized)
+% Parameter         Lower bound         Upper bound
+paramdata = {
+  'xKH'     0.001          1
+  'xsta'    0.001          1
+  'km3'     0.001          100
+  'km4'     0.001          100
+  'km5'     0.001          100
+  'km6'     0.001          100
+  'frck1'   0.001          100
+  'frck2'   0.001          100
+  'frck3'   0.001          100
+  'frck4'   0.001          100
+  'frck5'   0.001          100
+  'frck6'   0.001          100
+  'glck1'   0.001          100
+  'glck2'   0.001          100
+  'glck3'   0.001          100
+  'glck4'   0.001          100
+  'glck5'   0.001          100
+  'glck6'   0.001          100
+  'sps1'    0.001          100
+  'sps2'    0.001          100
+  'sps3'    0.001          100
+  'sps4'    0.001          100
+  'sps5'    0.001          100
+  'sps6'    0.001          100
+  'Inv1'    7              15
+  'Inv2'    4              15
+  'Inv3'    13             21
+  'Inv4'    11             20
+  'Inv5'    10             14
+  'Inv6'    5              15
+  'Ki1'     0.001          100
+  'Ki2'     0.001          100
+  'Ki3'     0.001          100
+  'Ki4'     0.001          100
+};
+
+% Define LOCAL parameters to estimate and lower and upper bound 
+%               Parameter       Lower bound     Upper bound
+paramdatalocal = {
+  
+};
+
+% Define initial conditions to be estimated
+%               Statename       Lower bound     Upper bound
+icdata = {          'Suc'     0.1354        2
+  'SP'      0.1           0.3
+  'Frc'     0.014         1
+  'St'      0.05          1
+  'Glc'     0.1009        2
+  
+};
+
+%% Define estimation structure
+estimation = []; clc;
+
+estimation.experiments.indices = [1:1];  % optimize all 1 experiments
+estimation.optimization.method = 'pswarmSB';
+%estimation.optimization.options.maxfuneval = 1000; 
+%estimation.optimization.method = 'simplexSB';
+%estimation.optimization.method = 'simannealingSB';
+estimation.timescalingFlag = 2;
+estimation.scalingFlag = 2;
+estimation.displayFlag = 2;
+
+estimation.modelindex = modelindex;  
+
+estimation.parameters = paramdata;
+estimation.parameterslocal = paramdatalocal;
+estimation.initialconditions = icdata;
+
+output = SBPDparameterestimation(sbpopt,estimation);
+sbpopt = output.projectopt;
+%% Compare the optimized project with the measurement data
+%SBPDcomparemeasurements(sbpopt,modelindex);
+%SBPDmanualtuning (sbpopt);
