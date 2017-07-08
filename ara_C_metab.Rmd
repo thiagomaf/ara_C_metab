@@ -1,0 +1,246 @@
+---
+title: "Arabidopsis primary C-metabolism in R"
+output: html_notebook
+---
+
+```{r}
+library(reshape2)
+library(deSolve)
+library(ggplot2)
+
+load("ara_C_metab.RData")
+
+data_melt <- melt(model.variables, id.vars = c("time", "dataset"))
+```
+
+
+```{r, fig.width=14, fig.height=5}
+ggplot(data_melt, aes(x = time, y = value, color = dataset)) +
+  geom_point() +
+  #coord_cartesian(xlim = c(0,1)) +
+  facet_grid(variable ~ dataset, scales = "free_y")
+```
+
+
+
+```{r}
+model.parameters <- c(xKH   = 1,
+                      xsta  = 0.58692,
+                      km3   = 0.405671,
+                      km4   = 13,
+                      km5   = 0.9,
+                      km6   = 0.2,
+                      frck1 = 4,
+                      frck2 = 3,
+                      frck3 = 6.79629,
+                      frck4 = 8.51127,
+                      frck5 = 7.91887,
+                      frck6 = 3.60503,
+                      glck1 = 5.1,
+                      glck2 = 7.9,
+                      glck3 = 10.1347,
+                      glck4 = 10.1353,
+                      glck5 = 8.34364,
+                      glck6 = 4.12337,
+                      sps1  = 27,
+                      sps2  = 27,
+                      sps3  = 17.9257,
+                      sps4  = 11,
+                      sps5  = 4,
+                      sps6  = 0.001,
+                      Inv1  = 73.8075,
+                      Inv2  = 139.676,
+                      Inv3  = 125,
+                      Inv4  = 107.005,
+                      Inv5  = 65.21,
+                      Inv6  = 62,
+                      Ki1   = 0.0134705,
+                      Ki2   = 0.0318915,
+                      Ki3   = 1.6,
+                      Ki4   = 0.0606671)
+
+model.yinit        <- c(0.915, 0.103, 0.159,  0.6,      1, 1.11)
+names(model.yinit) <- c("Suc",  "SP", "Frc", "St", "Sink", "Glc")
+
+dataset.to.use = "24h"
+#dataset.to.use = "48h"
+
+model.vars <- droplevels(model.variables[model.variables$dataset %in% dataset.to.use,])
+
+if(dataset.to.use == "24h") {
+  time  <- seq(0, 24*2, by = 1)
+} else if(dataset.to.use == "48h") {
+  time  <- seq(0, 48*2, by = 1)
+}
+```
+
+
+```{r}
+ara_C_metab <- function(t, y, parms, vars) {
+  #print(t)
+  # r1      <- vars[,"r1"]
+  # r7      <- vars[,"r7"]
+  # kKHmax  <- vars[,"kKHmax"]
+  # kKHmin  <- vars[,"kKHmin"]
+  # kstamax <- vars[,"kstamax"]
+  # kstamin <- vars[,"kstamin"]
+  # Vmax3   <- vars[,"Vmax3"]
+  # Vmax4   <- vars[,"Vmax4"]
+  # Vmax5   <- vars[,"Vmax5"]
+  # Vmax6   <- vars[,"Vmax6"]
+  r1      <- unname(unlist(predict(smooth.spline(x = vars[,"time"], y = vars[,"r1"]),      data.frame(x = t))$y))
+  r7      <- unname(unlist(predict(smooth.spline(x = vars[,"time"], y = vars[,"r7"]),      data.frame(x = t))$y))
+  kKHmax  <- unname(unlist(predict(smooth.spline(x = vars[,"time"], y = vars[,"kKHmax"]),  data.frame(x = t))$y))
+  kKHmin  <- unname(unlist(predict(smooth.spline(x = vars[,"time"], y = vars[,"kKHmin"]),  data.frame(x = t))$y))
+  kstamax <- unname(unlist(predict(smooth.spline(x = vars[,"time"], y = vars[,"kstamax"]), data.frame(x = t))$y))
+  kstamin <- unname(unlist(predict(smooth.spline(x = vars[,"time"], y = vars[,"kstamin"]), data.frame(x = t))$y))
+  Vmax3   <- unname(unlist(predict(smooth.spline(x = vars[,"time"], y = vars[,"Vmax3"]),   data.frame(x = t))$y))
+  Vmax4   <- unname(unlist(predict(smooth.spline(x = vars[,"time"], y = vars[,"Vmax4"]),   data.frame(x = t))$y))
+  Vmax5   <- unname(unlist(predict(smooth.spline(x = vars[,"time"], y = vars[,"Vmax5"]),   data.frame(x = t))$y))
+  Vmax6   <- unname(unlist(predict(smooth.spline(x = vars[,"time"], y = vars[,"Vmax6"]),   data.frame(x = t))$y))
+  
+  with(as.list(c(y, parms)), {
+    r3 <- (Vmax3*SP)  / (km3+SP)
+    r4 <- (Vmax4*Suc) / ((km4*(1+Frc/Ki2) + Suc*(1+Glc/Ki1)))
+    r5 <- (Vmax5*Frc) / ((km5+Frc) * (1+SP/Ki3))
+    r6 <- (Vmax6*Glc) / ((km6+Glc) * (1+SP/Ki4))
+
+    dydt     <- numeric()
+
+    dydt[1]  <- 0.5*r3 - 0.5*r7 - r4                                           # Suc
+    dydt[2]  <- 0.16667*r1 - (kstamin + xsta*(kstamax-kstamin)) - r3 + r5 + r6 # SP
+    dydt[3]  <- r4 - r5                                                        # Frc
+    dydt[4]  <- kstamin + xsta*(kstamax-kstamin)                               # St
+    dydt[5]  <- r7                                                             # Sink
+    dydt[6]  <- r4 - r6                                                        # Glc
+    #dydt[7]  <- kstamin                                                        # stamin
+    #dydt[8]  <- kstamax                                                        # stamax
+    #dydt[9]  <- kKHmin + xKH*(kKHmax-kKHmin)                                   # sumCH
+
+    return(list(dydt))
+  })
+}
+```
+
+
+```{r}
+simulation <- ode(t = time, y = model.yinit, func = ara_C_metab, parms = model.parameters, vars = model.vars, method = "lsoda")
+
+ggplot(melt(as.data.frame(simulation), id.vars = "time"), aes(x = time, y = value)) +
+  geom_point() +
+  #coord_cartesian(xlim = c(0,1)) +
+  facet_wrap(~ variable, scales = "free_y")
+```
+
+```{r}
+ara_C_metab <- function(t, y, parms, vars) {
+  #print(t)
+  # r1      <- vars[,"r1"]
+  # r7      <- vars[,"r7"]
+  # kKHmax  <- vars[,"kKHmax"]
+  # kKHmin  <- vars[,"kKHmin"]
+  # kstamax <- vars[,"kstamax"]
+  # kstamin <- vars[,"kstamin"]
+  # Vmax3   <- vars[,"Vmax3"]
+  # Vmax4   <- vars[,"Vmax4"]
+  # Vmax5   <- vars[,"Vmax5"]
+  # Vmax6   <- vars[,"Vmax6"]
+  r1      <- unname(unlist(predict(smooth.spline(x = vars[,"time"], y = vars[,"r1"]),      data.frame(x = t))$y))
+  r7      <- unname(unlist(predict(smooth.spline(x = vars[,"time"], y = vars[,"r7"]),      data.frame(x = t))$y))
+  kKHmax  <- unname(unlist(predict(smooth.spline(x = vars[,"time"], y = vars[,"kKHmax"]),  data.frame(x = t))$y))
+  kKHmin  <- unname(unlist(predict(smooth.spline(x = vars[,"time"], y = vars[,"kKHmin"]),  data.frame(x = t))$y))
+  kstamax <- unname(unlist(predict(smooth.spline(x = vars[,"time"], y = vars[,"kstamax"]), data.frame(x = t))$y))
+  kstamin <- unname(unlist(predict(smooth.spline(x = vars[,"time"], y = vars[,"kstamin"]), data.frame(x = t))$y))
+  Vmax3   <- unname(unlist(predict(smooth.spline(x = vars[,"time"], y = vars[,"Vmax3"]),   data.frame(x = t))$y))
+  Vmax4   <- unname(unlist(predict(smooth.spline(x = vars[,"time"], y = vars[,"Vmax4"]),   data.frame(x = t))$y))
+  Vmax5   <- unname(unlist(predict(smooth.spline(x = vars[,"time"], y = vars[,"Vmax5"]),   data.frame(x = t))$y))
+  Vmax6   <- unname(unlist(predict(smooth.spline(x = vars[,"time"], y = vars[,"Vmax6"]),   data.frame(x = t))$y))
+  
+  with(as.list(c(y, parms)), {
+    r3 <- (Vmax3*SP)  / (km3+SP)
+    r4 <- (Vmax4*Suc) / ((km4*(1+Frc/Ki2) + Suc*(1+Glc/Ki1)))
+    r5 <- (Vmax5*Frc) / ((km5+Frc) * (1+SP/Ki3))
+    r6 <- (Vmax6*Glc) / ((km6+Glc) * (1+SP/Ki4))
+
+    dydt     <- numeric()
+
+    dydt[1]  <- 0.5*r3 - 0.5*r7 - r4                                           # Suc
+    dydt[2]  <- 0.16667*r1 - (kstamin + xsta*(kstamax-kstamin)) - r3 + r5 + r6 # SP
+    dydt[3]  <- r4 - r5                                                        # Frc
+    dydt[4]  <- kstamin + xsta*(kstamax-kstamin)                               # St
+    dydt[5]  <- r7                                                             # Sink
+    dydt[6]  <- r4 - r6                                                        # Glc
+    #dydt[7]  <- kstamin                                                        # stamin
+    #dydt[8]  <- kstamax                                                        # stamax
+    #dydt[9]  <- kKHmin + xKH*(kKHmax-kKHmin)                                   # sumCH
+
+    return(list(dydt))
+  })
+}
+```
+
+
+```{r}
+# evaluate <- function(string = c(), time, period, day_num, daypat, dusk, melt.input, mod_light, map.species, method = "lsoda") {
+#   #returnVal <- NA
+#   returnVal <- 5000
+#   value.name <- "value.norm"
+#   out.string <<- string
+#   
+#   #####
+#   names(string) <- c("q1", "q2", "q3", "p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10", "p11", "p12", "p13", "p14", "p15", "p16", "p17", "p18", "p19", "p20", "p21", "p22", "p23", "p24", "p25", "p26", "p27", "p28", "p29", "p30",
+#                      "p31", "m1", "m2", "m3", "m4", "m5", "m6", "m7", "m8", "m9", "m10", "m11", "m12", "m13", "m14", "m15", "m16", "m17", "m18", "m19", "m20", "m21", "m22", "m23", "m24", "m25", "m26", "m27", "m28", "m29", "m30", "m31", 
+#                      "m32", "m33", "m34", "m35", "m36", "m37", "m38", "m39", "n1", "n2", "n3", "n4", "n5", "n6", "n7", "n8", "n9", "n10", "n11", "n12", "n13", "n14", "g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8", "g9", "g10", "g11", 
+#                      "g12", "g13", "g14", "g15", "g16", "a", "b", "c", "d", "e", "f")
+#   #print(string)
+#   
+#   #####
+#   # Suc(0)=0.915
+#   # SP(0)=0.103				
+#   # Frc(0)=0.159
+#   # St(0)=0.6
+#   # Sink(0)=1
+#   # Glc(0)=1.11
+#   yinit        <- c(0.915, 0.103, 0.159,  0.6,      1, 1.11)
+#   names(yinit) <- c("Suc",  "SP", "Frc", "St", "Sink", "Glc")
+# 
+#   # Parameters / genes values are used to run the model for each light intensity of Overcast data;
+#   # Simulation will generate a 3D matrix describing a "simulation surface" - 'out';
+#   #print(mod_light)
+#   if (length(mod_light) == 1) {
+#     #out <- ode(t = seq(from = 0, to = period, length.out = sample_time), y = out1[sample_time*day_num,-1], func = P2011, parms = string, method = method, daypat = daypat, dusk = dusk, period = period, mod_light = mod_light)
+#     out <- ode(t = time, y = yinit, func = P2011, parms = string, method = method, daypat = daypat, dusk = dusk, period = period, mod_light = mod_light)
+#     
+#   } else {
+#     stop("By now only on light int.")
+#     #     out <- llply(mod_light, function(each.level) {
+#     #       return(ode(t = seq(from = 0, to = period, length.out = sample_time), y = out1[sample_time*day_num,-1], func = P2011, parms = string, method = method, daypat = daypat, dusk = dusk, period = period, mod_light = each.level))
+#     #     })
+#   }
+#   
+#   # This surface will be compared to the analogous "empirical surface" - 'input_data' - from data measured using a 3D determination coefficient (r-squared like);
+#   melt.out <- melt(as.data.frame(out), id.vars = "time", value.name = "output", variable.name = "variable.sim")
+#   melt.out <- melt.out[melt.out$variable %in% levels(map.species$simulation),]
+#   melt.out <- melt.out[melt.out$time >= (max(melt.out$time) - 24),]
+#   melt.out[,"time"] <- melt.out[,"time"] - (max(melt.out$time) - 24)
+#   melt.out <- melt.out[melt.out$time %in% melt.input$time,]
+#   
+#   #colnames(melt.input)[which(colnames(melt.input) == "value")] <- "input"
+#   colnames(melt.input)[which(colnames(melt.input) == value.name)] <- "input"
+#   
+#   melt.data <- join(melt.input, melt.out, by = c("time", "variable.sim"))
+#   melt.data[,"residual"] <- abs(melt.data[,"input"] - melt.data[,"output"])
+#   returnVal <- sum(melt.data[,"residual"])
+#   
+#   #if(returnVal == "NaN") {returnVal <- NA}
+#   #if(is.numeric(returnVal)) {returnVal <- 5000}
+#   result <- tryCatch(if(is.numeric(returnVal) == FALSE) {returnVal <- 5000}, # first inflection point
+#                      warning = function(w) {4999},
+#                      error   = function(e) {4998})
+#   
+#   
+#   print(returnVal)
+#   
+#   return(returnVal)
+# }
+```
